@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -12,7 +11,6 @@ type Node struct {
 	name, message   int
 	infectionState  bool
 	contactChannels map[int]chan int
-	randval         int64
 }
 
 func (n *Node) sendMessage() {
@@ -21,8 +19,6 @@ func (n *Node) sendMessage() {
 }
 
 func (n *Node) receiveMessage() {
-	atomic.StoreInt64(&n.randval, 100)
-	//n.randval = 100
 	for i := 0; i < 3; i++ {
 		select {
 		case x, ok := <-n.contactChannels[n.name]:
@@ -46,9 +42,9 @@ func main() {
 	for i := 0; i < 3; i++ {
 		contacts[i] = make(chan int, 3)
 	}
-	n0 := Node{0, 1, true, contacts, 0}
-	n1 := Node{1, 0, false, contacts, 0}
-	n2 := Node{2, 0, false, contacts, 0}
+	n0 := Node{0, 1, true, contacts}
+	n1 := Node{1, 0, false, contacts}
+	n2 := Node{2, 0, false, contacts}
 
 	nodes := []Node{n0, n1, n2}
 
@@ -63,11 +59,9 @@ func main() {
 			}
 			time.Sleep(1 * time.Second)
 			n.receiveMessage()
+			fmt.Println(n)
 		}(i)
 	}
 	wg.Wait()
 	fmt.Println("All done")
-	fmt.Println(n0)
-	fmt.Println(n1)
-	fmt.Println(n2)
 }

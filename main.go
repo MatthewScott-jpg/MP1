@@ -4,26 +4,34 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 type Node struct {
-	name            int
-	message         int
+	name, message   int
+	infectionState  bool
 	contactChannels map[int]chan int
+	randval         int64
 }
 
-func sendMessage(name int, out map[int]chan int) {
+func (n *Node) sendMessage() {
 	randnode := rand.Intn(3)
-	out[randnode] <- name
+	n.contactChannels[randnode] <- n.message
 }
 
-func receiveMessage(name int, out map[int]chan int) {
+func (n *Node) receiveMessage() {
+	atomic.StoreInt64(&n.randval, 100)
+	//n.randval = 100
 	for i := 0; i < 3; i++ {
 		select {
-		case x, ok := <-out[name]:
+		case x, ok := <-n.contactChannels[n.name]:
 			if ok {
-				fmt.Println(name, " received from", x)
+				if !n.infectionState {
+					n.message = x
+					n.infectionState = true
+					fmt.Println(n.name, "received", x)
+				}
 			} else {
 				break
 			}
@@ -33,17 +41,16 @@ func receiveMessage(name int, out map[int]chan int) {
 }
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
 	contacts := make(map[int]chan int)
 	for i := 0; i < 3; i++ {
 		contacts[i] = make(chan int, 3)
 	}
-	n1 := Node{0, 0, contacts}
-	n2 := Node{1, 0, contacts}
-	n3 := Node{2, 0, contacts}
+	n0 := Node{0, 1, true, contacts, 0}
+	n1 := Node{1, 0, false, contacts, 0}
+	n2 := Node{2, 0, false, contacts, 0}
 
-	nodes := []Node{n1, n2, n3}
-
-	//out := make(chan int, 3)
+	nodes := []Node{n0, n1, n2}
 
 	var wg sync.WaitGroup
 	for i := 0; i < 3; i++ {
@@ -51,11 +58,16 @@ func main() {
 		go func(i int) {
 			defer wg.Done()
 			n := nodes[i]
-			sendMessage(n.name, n.contactChannels)
+			if n.infectionState {
+				n.sendMessage()
+			}
 			time.Sleep(1 * time.Second)
-			receiveMessage(n.name, n.contactChannels)
+			n.receiveMessage()
 		}(i)
 	}
 	wg.Wait()
 	fmt.Println("All done")
+	fmt.Println(n0)
+	fmt.Println(n1)
+	fmt.Println(n2)
 }

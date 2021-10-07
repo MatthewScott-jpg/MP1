@@ -12,32 +12,39 @@ type Node struct {
 	name, message   int
 	contactChannels map[int]chan int
 }
-
-var nodes map[int]Node
-var numInfected int64
-var mu sync.Mutex
-
-func (n *Node) pushSendMessage() {
-	randnode := rand.Intn(3)
-	fmt.Println("Sending to ", randnode)
-	n.contactChannels[randnode] <- n.message
+type NodeMap struct {
+	nodes map[int]Node
+	mu    sync.Mutex
 }
 
-func (n *Node) pushReceiveMessage() {
-	mu.Lock()
+var nm NodeMap
+var nodes map[int]Node
+var numInfected int64
+var totalRuns int64
+
+func (nm *NodeMap) pushSendMessage(i int) {
+	randnode := rand.Intn(3)
+	fmt.Println(nm.nodes[i].name, "Sending to ", randnode)
+	nm.nodes[i].contactChannels[randnode] <- nm.nodes[i].message
+}
+
+func (nm *NodeMap) pushReceiveMessage(i int) {
+	nm.mu.Lock()
 	select {
-	case x, ok := <-n.contactChannels[n.name]:
+	case x, ok := <-nm.nodes[i].contactChannels[i]:
 		if ok {
-			if n.message == 0 {
-				n.message = x
+			if nm.nodes[i].message == 0 {
+				val := nm.nodes[i]
+				val.message = x
+				nm.nodes[i] = val
 				atomic.AddInt64(&numInfected, 1)
-				fmt.Println(n.name, "received", x)
+				fmt.Println(i, "received", x)
 			}
 		}
 	default:
 		break //handles case where channel is empty
 	}
-	mu.Unlock()
+	nm.mu.Unlock()
 }
 
 func main() {
@@ -55,28 +62,31 @@ func main() {
 	nodes[0] = n0
 	nodes[1] = n1
 	nodes[2] = n2
+	nm = NodeMap{nodes: nodes}
 
-	totalRuns := 0
+	totalRuns = 0
 
-	var wg sync.WaitGroup
 	//Implements push protocol
 	for numInfected < 3 {
-		totalRuns += 1
+		var wg sync.WaitGroup
+		//nm.mu.Lock()
 		for i := 0; i < 3; i++ {
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
-				n := nodes[i]
+				n := nm.nodes[i]
 				if n.message == 1 {
-					n.pushSendMessage()
+					nm.pushSendMessage(n.name)
 				}
 				time.Sleep(1 * time.Second)
-				n.pushReceiveMessage()
+				nm.pushReceiveMessage(n.name)
 			}(i)
 		}
+		wg.Wait()
+		//nm.mu.Unlock()
+		atomic.AddInt64(&totalRuns, 1)
 		time.Sleep(1 * time.Second)
 	}
-	wg.Wait()
 	fmt.Println("All done")
 	fmt.Println("TR:", totalRuns)
 }

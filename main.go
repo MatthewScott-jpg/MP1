@@ -15,14 +15,16 @@ type Node struct {
 
 var nodes map[int]Node
 var numInfected int64
+var mu sync.Mutex
 
-func (n *Node) sendMessage() {
+func (n *Node) pushSendMessage() {
 	randnode := rand.Intn(3)
 	fmt.Println("Sending to ", randnode)
 	n.contactChannels[randnode] <- n.message
 }
 
-func (n *Node) receiveMessage() {
+func (n *Node) pushReceiveMessage() {
+	mu.Lock()
 	select {
 	case x, ok := <-n.contactChannels[n.name]:
 		if ok {
@@ -35,6 +37,7 @@ func (n *Node) receiveMessage() {
 	default:
 		break //handles case where channel is empty
 	}
+	mu.Unlock()
 }
 
 func main() {
@@ -56,6 +59,7 @@ func main() {
 	totalRuns := 0
 
 	var wg sync.WaitGroup
+	//Implements push protocol
 	for numInfected < 3 {
 		totalRuns += 1
 		for i := 0; i < 3; i++ {
@@ -64,10 +68,10 @@ func main() {
 				defer wg.Done()
 				n := nodes[i]
 				if n.message == 1 {
-					n.sendMessage()
+					n.pushSendMessage()
 				}
 				time.Sleep(1 * time.Second)
-				n.receiveMessage()
+				n.pushReceiveMessage()
 			}(i)
 		}
 		time.Sleep(1 * time.Second)

@@ -8,11 +8,15 @@ import (
 	"time"
 )
 
+//Node Each has a name, message, and a corresponding channel map and name map\\
+//Node Each node has its own channel map to ensure that no message is lost during Go Routines
 type Node struct {
 	name, message   int
 	contactChannels map[int]chan int //for sending messages
 	nameChannels    map[int]chan int //for sending name as a request
 }
+
+//NodeMap Structure for a map of nodes
 type NodeMap struct {
 	nodes map[int]Node
 	mu    sync.Mutex
@@ -23,6 +27,7 @@ var nodes map[int]Node
 var numInfected int64
 var totalRuns int64
 
+//pullSendRequest
 func (nm *NodeMap) pullSendRequest(i int) {
 	if nm.nodes[i].message == 0 {
 		randNode := rand.Intn(3)
@@ -134,6 +139,20 @@ func pushProtocol(wg *sync.WaitGroup) {
 	}
 }
 
+//Runs Push or Pull protocol based on the ratio of numInfected and total nodes.
+func pushPullProtocol(wg *sync.WaitGroup) {
+	for numInfected < 3 {
+		print(len(nm.nodes)/2)
+		if numInfected < int64(len(nm.nodes)/2) {
+			pushProtocol(wg)
+		}else {
+			pullProtocol(wg)
+		}
+		atomic.AddInt64(&totalRuns, 1)
+		time.Sleep(1 * time.Second)
+	}
+}
+
 //resets totalRuns and numInfected to starting value,
 func resetVariables(totalNodes int) {
 	totalRuns = 0
@@ -148,6 +167,7 @@ func resetVariables(totalNodes int) {
 			break //handles case where channel is empty
 		}
 	}
+	//Resets nodes to original values
 	for i := 1; i < totalNodes; i++ { //Node 0 is always infected, so it does not need to be reset
 		tmpNode := Node{i, 0, nm.nodes[0].contactChannels, nm.nodes[0].nameChannels}
 		nm.nodes[i] = tmpNode
@@ -181,4 +201,11 @@ func main() {
 	//Calls pull protocol function
 	pullProtocol(&wg)
 	fmt.Println("Pull TR:", totalRuns)
+
+	//reset variables for push-pull-run
+	resetVariables(3)
+
+	//Calls push-pull protocol function
+	pushPullProtocol(&wg)
+	fmt.Println("Push-Pull TR:", totalRuns)
 }
